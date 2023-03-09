@@ -1,0 +1,237 @@
+
+import alpha_vantage
+
+
+import pandas as pd
+from alpha_vantage.timeseries import TimeSeries
+import matplotlib.pyplot as plt
+
+# Replace YOUR_API_KEY with your actual API key
+api_key = 'SBUFNJV5Z4GE44BY'
+ts = TimeSeries(key=api_key, output_format='pandas')
+
+# Replace SYMBOL with the stock symbol you want to retrieve data for
+symbol = 'AAPL'
+data, metadata = ts.get_daily_adjusted(symbol, outputsize = 'full')
+
+# Create a new dataframe with the columns we want
+df = pd.DataFrame(columns=['Date', 'Open', 'High', 'Low', 'Close', 'Adj Close', 'Volume'])
+
+# Iterate through the data returned from the API and add it to the dataframe
+for date, row in data.iterrows():
+    new_row = {'Date': date.date(), 'Open': row['1. open'], 'High': row['2. high'], 'Low': row['3. low'], 'Close': row['4. close'], 'Adj Close': row['5. adjusted close'], 'Volume': row['6. volume']}
+
+    df = pd.concat([df, pd.DataFrame(new_row, index=[0])], ignore_index=True)
+
+df['Next Day Change'] = df['Close'].shift(4) - df['Close']
+df['1Day'] = df['Close'].shift(-1) - df['Close']
+df['2Day'] = df['Close'].shift(-2) - df['Close']
+df['3Day'] = df['Close'].shift(-3) - df['Close']
+df['4Day'] = df['Close'].shift(-4) - df['Close']
+df['-1Day'] = df['Close'].shift(1) - df['Close']
+df['-2Day'] = df['Close'].shift(2) - df['Close']
+df['-3Day'] = df['Close'].shift(3) - df['Close']
+df['-4Day'] = df['Close'].shift(4) - df['Close']
+
+print(df.columns)
+df = df.dropna(axis=0)
+
+
+pd.set_option('display.max_columns', None)  # or 1000
+
+pd.set_option('display.max_colwidth', None)  # or 199
+print(df)
+
+import numpy as np
+import pandas as pd
+import tensorflow as tf
+from sklearn.preprocessing import MinMaxScaler
+from tensorflow.keras.models import Sequential
+from tensorflow.keras.layers import Dense, LSTM, Dropout
+
+data = df.loc[:, df.columns != 'Date']
+
+# Specify the column to be predicted
+pred_col = '-4Day'
+print(pred_col)
+
+
+df.to_csv('data0703.csv')
+# Split the data into X and y
+X = data.drop(columns=[pred_col]).values
+y = data[pred_col].values.reshape(-1, 1)
+
+# Scale the data
+scaler = MinMaxScaler()
+X_scaled = scaler.fit_transform(X)
+y_scaled = scaler.fit_transform(y)
+
+# Reshape X into a 3D array
+num_samples, num_features = X_scaled.shape
+X_reshaped = X_scaled.reshape(num_samples, 1, num_features)
+
+# Split data into training and testing sets
+split_index = int(len(data) * 0.90)
+X_train, X_test = X_reshaped[:split_index], X_reshaped[split_index:]
+y_train, y_test = y_scaled[:split_index], y_scaled[split_index:]
+
+'''
+The given model is a sequential model, 
+which is a linear stack of layers. 
+It is primarily designed for sequential 
+data processing such as time-series forecasting, 
+natural language processing, speech recognition, 
+etc. The model comprises four layers of LSTM and one dense layer.
+
+The first layer of the model is an LSTM 
+layer with 50 units. LSTM stands for Long 
+Short-Term Memory and is a type of Recurrent 
+Neural Network (RNN) that is capable of remembering 
+long-term dependencies in sequential data. The "units" 
+parameter specifies the number of LSTM units in the layer. 
+Return sequences are set to true as we want to use the output 
+of this layer as the input of the next layer. The input shape 
+parameter specifies the shape of the input data. Here, the input 
+shape is (1, num_features), which means that we expect a sequence 
+of 1 timestep with num_features as the number of features in each timestep.
+
+The second layer of the model is a Dropout layer with a dropout rate of 0.2. 
+Dropout is a regularization technique that helps to prevent overfitting in deep neural networks. 
+The dropout rate specifies the fraction of input units that are randomly excluded from each 
+update cycle during training. In this case, 20% of the input units will be randomly excluded during training.
+
+The third layer of the model is another LSTM layer with 50 units, and return sequences set to true. 
+This layer is similar to the first LSTM layer, but it takes the output from the previous LSTM layer as its input.
+
+The fourth layer of the model is another Dropout layer with a dropout rate of 0.2. This layer is similar 
+to the second Dropout layer, but it is applied after the second LSTM layer.
+
+The fifth and final layer of the model is a Dense layer with one unit. Dense layers are 
+the standard type of layer in neural networks. They are fully connected layers, where each 
+neuron is connected to every neuron in the previous layer. The number of units in the dense
+layer specifies the number of neurons in the layer. Here, we only have one unit because we 
+are trying to predict a single value. The output of this layer is the predicted value.
+
+In summary, the model consists of four LSTM layers, each with 50 units,
+and three Dropout layers, each with a dropout rate of 0.2. 
+The LSTM layers learn the temporal dependencies in the input 
+data, while the Dropout layers help to prevent overfitting. 
+The final Dense layer produces the output, which is the predicted value. 
+The input data is expected to be a sequence of 1 timestep with num_features 
+as the number of features in each timestep. This model is suitable for
+time-series forecasting problems where we want to predict a single value based on the historical data.
+'''
+
+# Define the model
+model = Sequential()
+model.add(LSTM(units=50, return_sequences=True, input_shape=(1, num_features)))
+model.add(Dropout(0.2))
+model.add(LSTM(units=50, return_sequences=True))
+model.add(Dropout(0.2))
+model.add(LSTM(units=50))
+model.add(Dropout(0.2))
+model.add(Dense(units=1))
+
+# Compile the model
+'''
+The Huber loss is a 
+loss function used in regression 
+problems that combines the advantages 
+of the Mean Squared Error (MSE) 
+and Mean Absolute Error (MAE) loss functions.
+The Huber loss function is defined as:
+
+$L_{\delta}(y, f(x)) = \begin{cases} 
+\frac{1}{2}(y-f(x))^2 & \text{if} ; |y-f(x)| \leq \delta \ \delta|y-f(x)| 
+- \frac{1}{2}\delta^2 & \text{otherwise} \end{cases}$
+
+Where y is the true value, f(x) 
+is the predicted value, and delta (δ) 
+is a threshold parameter that determines the 
+point at which the loss function switches from 
+being quadratic to being linear. If the absolute 
+difference between the predicted value and the true 
+value is less than or equal to delta, the loss is quadratic,
+as in the case of MSE. If the absolute difference is greater than delta, 
+the loss is linear, as in the case of MAE. By combining the two approaches, 
+the Huber loss is less sensitive to outliers than the MSE, while still being 
+differentiable and having a unique minimum.
+
+'''
+model.compile(loss='Huber', optimizer='adam', metrics=['mean_squared_error'])
+# Train the model
+history = model.fit(X_train, y_train, epochs=10, batch_size=3, validation_split=0.3)
+
+# Evaluate the model
+loss = model.evaluate(X_test, y_test)
+print('Test loss:', loss)
+
+# Make predictions
+y_pred = model.predict(X_test)
+
+# Inverse transform the scaled data
+y_pred = scaler.inverse_transform(y_pred)
+y_test = scaler.inverse_transform(y_test)
+
+# Plot the predictions
+import matplotlib.pyplot as plt
+
+plt.plot(y_test, color='blue', label='Actual')
+plt.plot(y_pred, color='red', label='Predicted')
+plt.legend()
+plt.show()
+
+# list all data in history
+print(history.history.keys())
+
+plt.plot(history.history['mean_squared_error'])
+plt.plot(history.history['val_mean_squared_error'])
+plt.title('model accuracy')
+plt.ylabel('accuracy')
+plt.xlabel('epoch')
+plt.legend(['train', 'val'], loc='upper left')
+plt.show()
+
+plt.plot(history.history['loss'])
+plt.plot(history.history['val_loss'])
+plt.title('model loss')
+plt.ylabel('loss')
+plt.xlabel('epoch')
+plt.legend(['train', 'val'], loc='upper left')
+plt.show()
+
+# Evaluate the model
+loss = model.evaluate(X_test, y_test)
+print('Test loss:', loss)
+
+from keras.models import Model
+
+'''
+This code creates an intermediate model 
+using the Model function that outputs the activations
+of all the layers in the original model. It then uses
+the predict function to get the activations of the hidden 
+layers for the test set. Finally, it plots the activations 
+for the first sequence in the test set for each layer.
+
+This visualization can help you understand 
+how the model is processing the input data and making 
+its predictions. You can analyze the pattern of the activations
+to see if they match the expected behavior based on the 
+input and output data.
+'''
+
+# Create an intermediate model to output the activations of the hidden layers
+layer_outputs = [layer.output for layer in model.layers]
+activation_model = Model(inputs=model.input, outputs=layer_outputs)
+
+# Get the activations of the hidden layers for the test set
+activations = activation_model.predict(X_test)
+
+# Plot the activations for the first sequence in the test set
+fig, axs = plt.subplots(len(activations), 1, figsize=(10,10))
+for i, activation in enumerate(activations):
+    axs[i].plot(np.arange(len(activation[0])), activation[0])
+    axs[i].set_title('Activation of layer {}'.format(i+1))
+plt.show()
+
